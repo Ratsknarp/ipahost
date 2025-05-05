@@ -1,0 +1,141 @@
+name: Generate installation index
+
+on:
+  push:
+    paths:
+      - 'docs/*.ipa'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Create output folder
+        run: mkdir -p docs
+
+      - name: Generate manifest.plist files and index.html
+        run: |
+          python3 <<EOF
+          import os
+          import plistlib
+          import zipfile
+          import tempfile
+          from datetime import datetime
+
+          ipa_folder = "docs"
+          output_folder = "docs"
+          base_url = "https://ratsknarp.github.io/ipahost/docs"
+
+          index_lines = [
+              "<!DOCTYPE html>",
+              "<html><head><title>IPA Downloads</title>",
+              "<style>table {border-collapse: collapse;width: 100%;} td, th {border: 1px solid black;padding: 8px;text-align: left;} th {cursor: pointer;}</style>",
+              "<script>",
+              "function sortTable(n) {",
+              "  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;",
+              "  table = document.getElementById('ipaTable');",
+              "  switching = true;",
+              "  dir = 'asc';",
+              "  while (switching) {",
+              "    switching = false;",
+              "    rows = table.rows;",
+              "    for (i = 1; i < (rows.length - 1); i++) {",
+              "      shouldSwitch = false;",
+              "      x = rows[i].getElementsByTagName('TD')[n];",
+              "      y = rows[i + 1].getElementsByTagName('TD')[n];",
+              "      if (dir == 'asc') {",
+              "        if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {",
+              "          shouldSwitch = true;",
+              "          break;",
+              "        }",
+              "      } else if (dir == 'desc') {",
+              "        if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {",
+              "          shouldSwitch = true;",
+              "          break;",
+              "        }",
+              "      }",
+              "    }",
+              "    if (shouldSwitch) {",
+              "      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);",
+              "      switching = true;",
+              "      switchcount++;",
+              "    } else {",
+              "      if (switchcount == 0 && dir == 'asc') {",
+              "        dir = 'desc';",
+              "        switching = true;",
+              "      }",
+              "    }",
+              "  }",
+              "}",
+              "</script>",
+              "</head><body><h1>IPA Installation Links</h1><table id='ipaTable'>",
+              "<thead><tr><th onclick='sortTable(0)'>Name</th><th onclick='sortTable(1)'>Version</th><th onclick='sortTable(2)'>Date</th><th onclick='sortTable(3)'>Bundle ID</th><th>Install Link</th></tr></thead><tbody>"
+          ]
+
+          for ipa in os.listdir(ipa_folder):
+              if not ipa.endswith(".ipa"):
+                  continue
+
+              ipa_path = os.path.join(ipa_folder, ipa)
+
+              with tempfile.TemporaryDirectory() as tmpdir:
+                  with zipfile.ZipFile(ipa_path, 'r') as zip_ref:
+                      zip_ref.extractall(tmpdir)
+
+                  payload_path = os.path.join(tmpdir, "Payload")
+                  app_dirs = [d for d in os.listdir(payload_path) if d.endswith(".app")]
+                  if not app_dirs:
+                      continue
+
+                  info_plist_path = os.path.join(payload_path, app_dirs[0], "Info.plist")
+                  with open(info_plist_path, "rb") as f:
+                      plist_data = plistlib.load(f)
+
+                  app_name = plist_data.get("CFBundleDisplayName") or plist_data.get("CFBundleName", ipa)
+                  app_version = plist_data.get("CFBundleShortVersionString", "1.0")
+                  bundle_id = plist_data.get("CFBundleIdentifier", "com.example.app")
+
+              creation_date = datetime.fromtimestamp(os.path.getctime(ipa_path)).strftime("%Y-%m-%d %H:%M:%S")
+
+              plist = {
+                  "items": [{
+                      "assets": [{
+                          "kind": "software-package",
+                          "url": f"{base_url}/{ipa}"
+                      }],
+                      "metadata": {
+                          "bundle-identifier": bundle_id,
+                          "bundle-version": app_version,
+                          "kind": "software",
+                          "title": app_name
+                      }
+                  }]
+              }
+
+              plist_path = os.path.join(output_folder, f"{ipa}.plist")
+              with open(plist_path, "wb") as f:
+                  plistlib.dump(plist, f)
+
+              itms_url = f"itms-services://?action=download-manifest&url={base_url}/{ipa}.plist"
+              index_lines.append(f'<tr><td>{app_name}</td><td>{app_version}</td><td>{creation_date}</td><td>{bundle_id}</td><td><a href="{itms_url}">Install</a></td></tr>')
+
+          index_lines.append("</tbody></table></body></html>")
+
+          with open(os.path.join(output_folder, "index.html"), "w") as f:
+              f.write("\n".join(index_lines))
+          EOF
+
+      - name: Commit and push results
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add docs/
+          git commit -m "Auto-generated manifest and index with bundle ID" || echo "No changes to commit"
+          git push

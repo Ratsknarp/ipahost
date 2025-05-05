@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html><head><title>IPA Downloads</title>
+<style>table {border-collapse: collapse;width: 100%;} td, th {border: 1px solid black;padding: 8px;text-align: left;} th {cursor: pointer;}</style>
+<script>
+function sortTable(n) {
+  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+  table = document.getElementById('ipaTable');
+  switching = true;
+  dir = 'asc';
+  while (switching) {
+    switching = false;
+    rows = table.rows;
+    for (i = 1; i < (rows.length - 1); i++) {
+      shouldSwitch = false;
+      x = rows[i].getElementsByTagName('TD')[n];
+      y = rows[i + 1].getElementsByTagName('TD')[n];
+      if (dir == 'asc') {
+        if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+          shouldSwitch = true;
+          break;
+        }
+      } else if (dir == 'desc') {
+        if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+          shouldSwitch = true;
+          break;
+        }
+      }
+    }
+    if (shouldSwitch) {
+      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+      switching = true;
+      switchcount++;
+    } else {
+      if (switchcount == 0 && dir == 'asc') {
+        dir = 'desc';
+        switching = true;
+      }
+    }
+  }
+}
+</script>
+</head><body><h1>IPA Installation Links</h1><table id='ipaTable'>
+<thead><tr><th onclick='sortTable(0)'>Name</th><th onclick='sortTable(1)'>Version</th><th onclick='sortTable(2)'>Date</th><th onclick='sortTable(3)'>Bundle ID</th><th>Install Link</th></tr></thead><tbody>
+<tr><td>Feather</td><td>2.0</td><td>2025-05-05 23:02:39</td><td>pisign</td><td><a href="itms-services://?action=download-manifest&url=https://ratsknarp.github.io/ipahost/docs/ifeather-may5-signed.ipa.plist">Install</a></td></tr>
+</tbody></table></body></html>
